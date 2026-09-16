@@ -38,6 +38,7 @@ public final class ForkConfig {
     private boolean blockSellWhileAfk;
 
     private boolean worldGuardFlagsEnabled;
+    private boolean shopIsAuthoritative;
     private boolean requirePlayerOnline;
     private boolean requireChunkLoaded;
 
@@ -96,6 +97,8 @@ public final class ForkConfig {
 
         this.worldGuardFlagsEnabled = cfg.getBoolean("worldguard.flags_enabled", true);
 
+        this.shopIsAuthoritative = cfg.getBoolean("sell.shop_is_authoritative", true);
+
         this.requirePlayerOnline = cfg.getBoolean("generation.require_player_online", false);
         this.requireChunkLoaded = cfg.getBoolean("generation.require_chunk_loaded", false);
     }
@@ -138,6 +141,14 @@ public final class ForkConfig {
     /** No loot while the spawner chunk is unloaded. */
     public boolean isRequireChunkLoaded() {
         return requireChunkLoaded;
+    }
+
+    /**
+     * The hooked shop plugin has the final say: an item it refuses to buy is never sold
+     * via the custom price list in sell_integration.yml.
+     */
+    public boolean isShopIsAuthoritative() {
+        return shopIsAuthoritative;
     }
 
     /** Master switch for the fork-only WorldGuard flags. */

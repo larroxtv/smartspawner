@@ -68,3 +68,15 @@ generation:
 
   # Kein Loot, solange der Chunk des Spawners nicht geladen ist.
   require_chunk_loaded: true
+
+# ---------------------------------------------------------------------
+#  Verkauf
+# ---------------------------------------------------------------------
+sell:
+
+  # true = das gehookte Shop-Plugin (z.B. EconomyShopGUI-Premium) hat das letzte Wort:
+  #        Items, die der Shop nicht ankauft (buy-only oder gar nicht im Shop),
+  #        lassen sich auch dann nicht verkaufen, wenn sie in sell_integration.yml
+  #        unter custom_prices einen Preis haben (z.B. PHANTOM_MEMBRANE).
+  # false = Upstream-Verhalten, custom_prices greift als Fallback.
+  shop_is_authoritative: true

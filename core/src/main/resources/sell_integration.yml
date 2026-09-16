@@ -18,10 +18,6 @@ shop_integration:
   # auto, EconomyShopGUI, EconomyShopGUI-Premium, ShopGUIPlus or zShop.
   preferred_plugin: auto
 
-  # true: an item the hooked shop refuses to buy (buy-only or not in the shop) can never be sold,
-  # even if it has a custom price below. false: the custom price list may still sell it.
-  shop_is_authoritative: true
-
 custom_prices:
   enabled: true
 
