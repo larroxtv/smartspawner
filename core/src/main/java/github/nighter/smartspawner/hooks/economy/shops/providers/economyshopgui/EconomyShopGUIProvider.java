@@ -4,11 +4,15 @@ import github.nighter.smartspawner.SmartSpawner;
 import github.nighter.smartspawner.hooks.economy.shops.providers.ShopProvider;
 import lombok.RequiredArgsConstructor;
 import me.gypopo.economyshopgui.api.EconomyShopGUIHook;
+import me.gypopo.economyshopgui.api.prices.AdvancedSellPrice;
 import me.gypopo.economyshopgui.objects.ShopItem;
+import me.gypopo.economyshopgui.util.EcoType;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
+
+import java.util.Map;
 
 @RequiredArgsConstructor
 public class EconomyShopGUIProvider implements ShopProvider {
@@ -26,16 +30,11 @@ public class EconomyShopGUIProvider implements ShopProvider {
     @Override
     public boolean isAvailable() {
         try {
-            Plugin economyShopGUI = null;
             for (String pluginName : PLUGIN_NAMES) {
-                economyShopGUI = Bukkit.getPluginManager().getPlugin(pluginName);
+                Plugin economyShopGUI = Bukkit.getPluginManager().getPlugin(pluginName);
                 if (economyShopGUI != null) {
-                    break;
+                    return true;
                 }
-            }
-
-            if (economyShopGUI != null) {
-                return true;
             }
         } catch (Exception e) {
             plugin.getLogger().warning("Error initializing EconomyShopGUI integration: " + e.getMessage());
@@ -43,61 +42,64 @@ public class EconomyShopGUIProvider implements ShopProvider {
         return false;
     }
 
+    /**
+     * Mirrors what /sell and /sellgui do in EconomyShopGUI(-Premium):
+     * anything the shop buys there is sellable here, at the same price.
+     */
     @Override
     public double getSellPrice(Material material) {
         try {
             ItemStack item = new ItemStack(material);
             ShopItem shopItem = EconomyShopGUIHook.getShopItem(item);
 
-            if (shopItem == null) {
-                // Not configured in the shop at all -> not sellable.
+            if (shopItem == null || !EconomyShopGUIHook.isSellAble(shopItem)) {
                 return 0.0;
             }
 
-            if (!isSellable(shopItem)) {
-                // Buy-only items (e.g. Phantom Membrane in the default shop) must not be sellable.
-                return 0.0;
+            // Items with several sell prices (multi-currency setups) return null from the plain
+            // getItemSellPrice(...), which is why they looked unsellable before.
+            if (EconomyShopGUIHook.hasMultipleSellPrices(shopItem)) {
+                double advanced = getAdvancedSellPrice(shopItem, item);
+                if (advanced > 0.0) {
+                    return advanced;
+                }
             }
 
             Double sellPrice = EconomyShopGUIHook.getItemSellPrice(shopItem, item);
-            if (sellPrice == null || sellPrice <= 0.0) {
-                return 0.0;
+            if (sellPrice != null && sellPrice > 0.0) {
+                return sellPrice;
             }
-            return sellPrice;
-        } catch (Exception e) {
+
+            // Last resort: the item-only lookup, which resolves some dynamic-pricing setups.
+            Double fallback = EconomyShopGUIHook.getItemSellPrice(item);
+            return fallback != null && fallback > 0.0 ? fallback : 0.0;
+        } catch (Exception | NoSuchMethodError e) {
             return 0.0;
         }
     }
 
-    /**
-     * EconomyShopGUI marks buy-only items either via a sell-disabled flag or by a missing/negative
-     * sell price. The API surface differs between versions (free vs Premium), so the flag is read
-     * reflectively and we fall back to the raw sell price when it is absent.
-     */
-    private boolean isSellable(ShopItem shopItem) {
-        for (String method : new String[]{"isSellable", "canSell", "isSellEnabled"}) {
-            try {
-                Object result = shopItem.getClass().getMethod(method).invoke(shopItem);
-                if (result instanceof Boolean bool) {
-                    return bool;
-                }
-            } catch (ReflectiveOperationException | RuntimeException ignored) {
-                // Method not present in this EconomyShopGUI version, try the next one.
-            }
-        }
-
+    private double getAdvancedSellPrice(ShopItem shopItem, ItemStack item) {
         try {
-            Object raw = shopItem.getClass().getMethod("getSellPrice").invoke(shopItem);
-            if (raw instanceof Number number) {
-                return number.doubleValue() > 0.0;
+            AdvancedSellPrice advanced = EconomyShopGUIHook.getMultipleSellPrices(shopItem);
+            if (advanced == null || !advanced.isSellAble()) {
+                return 0.0;
             }
-            if (raw == null) {
-                return false;
-            }
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            // No sell price accessor; fall through and let the hook price decide.
-        }
 
-        return true;
+            EcoType preferred = advanced.getSellTypes().isEmpty() ? null : advanced.getSellTypes().getFirst();
+            Map<EcoType, Double> prices = advanced.getSellPrices(preferred, item);
+            if (prices == null || prices.isEmpty()) {
+                return 0.0;
+            }
+
+            double best = 0.0;
+            for (Double price : prices.values()) {
+                if (price != null && price > best) {
+                    best = price;
+                }
+            }
+            return best;
+        } catch (Exception | NoSuchMethodError e) {
+            return 0.0;
+        }
     }
 }
