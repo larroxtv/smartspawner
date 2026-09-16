@@ -176,7 +176,11 @@ public class ItemPriceManager {
 
     private double getCustomPrice(Material material) {
         if (!economyEnabled || !customPricesEnabled) return 0.0;
-        return itemPrices.getOrDefault(material.name(), defaultPrice);
+        // Items that are not listed in sell_integration.yml are not sellable.
+        // Previously this fell back to default_price, which made every material
+        // (Phantom Membrane, mob-drop-only items, ...) sellable for the default price.
+        Double price = itemPrices.get(material.name());
+        return price != null ? price : 0.0;
     }
 
     private double getShopPrice(Material material) {

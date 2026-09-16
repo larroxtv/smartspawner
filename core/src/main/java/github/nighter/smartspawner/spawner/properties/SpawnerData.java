@@ -708,10 +708,11 @@ public class SpawnerData {
 
         for (LootItem lootItem : allLootItems) {
             // Use live price from ItemPriceManager; fall back to baked sellPrice if unavailable
-            double price = (priceManager != null) ? priceManager.getPrice(lootItem.material()) : 0.0;
-            if (price <= 0.0) {
-                price = lootItem.sellPrice();
-            }
+            // Only fall back to the baked price when no live price source exists at all.
+            // Falling back on a 0 price would re-enable items the shop refuses to buy.
+            double price = (priceManager != null)
+                    ? priceManager.getPrice(lootItem.material())
+                    : lootItem.sellPrice();
             if (price > 0.0) {
                 ItemStack template = lootItem.createItemStack();
                 if (template != null) {
