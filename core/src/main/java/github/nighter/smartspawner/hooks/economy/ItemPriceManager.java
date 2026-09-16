@@ -42,6 +42,7 @@ public class ItemPriceManager {
     private CurrencyManager currencyManager;
 
     private double defaultPrice;
+    private boolean shopIsAuthoritative;
     private PriceSourceMode priceSourceMode;
     private boolean economyEnabled;
     public boolean customPricesEnabled;
@@ -98,6 +99,7 @@ public class ItemPriceManager {
         this.defaultPrice = config.getDouble("custom_prices.default_price", 1.0);
         this.customPricesEnabled = config.getBoolean("custom_prices.enabled", true);
         this.shopIntegrationEnabled = config.getBoolean("shop_integration.enabled", true);
+        this.shopIsAuthoritative = config.getBoolean("shop_integration.shop_is_authoritative", true);
 
         String modeString = config.getString("price_source_mode", "SHOP_PRIORITY");
         try {
@@ -164,11 +166,21 @@ public class ItemPriceManager {
             case SHOP_ONLY:
                 return getShopPrice(material);
             case CUSTOM_PRIORITY:
+                if (isRefusedByShop(material)) {
+                    return 0.0;
+                }
                 double customPrice = getCustomPrice(material);
                 return customPrice > 0 ? customPrice : getShopPrice(material);
             case SHOP_PRIORITY:
                 double shopPrice = getShopPrice(material);
-                return shopPrice > 0 ? shopPrice : getCustomPrice(material);
+                if (shopPrice > 0) {
+                    return shopPrice;
+                }
+                // The shop is live and refuses to buy this item -> no custom fallback.
+                if (isRefusedByShop(material)) {
+                    return 0.0;
+                }
+                return getCustomPrice(material);
             default:
                 return defaultPrice;
         }
@@ -181,6 +193,17 @@ public class ItemPriceManager {
         // (Phantom Membrane, mob-drop-only items, ...) sellable for the default price.
         Double price = itemPrices.get(material.name());
         return price != null ? price : 0.0;
+    }
+
+    /**
+     * True when a shop plugin is hooked and it does not buy this material. In that case the
+     * custom price list must not resell the item behind the shop's back (e.g. PHANTOM_MEMBRANE).
+     */
+    private boolean isRefusedByShop(Material material) {
+        if (!shopIsAuthoritative) return false;
+        if (!shopIntegrationEnabled || shopIntegrationManager == null) return false;
+        if (!shopIntegrationManager.hasActiveProvider()) return false;
+        return shopIntegrationManager.getPrice(material) <= 0.0;
     }
 
     private double getShopPrice(Material material) {
@@ -287,9 +310,7 @@ public class ItemPriceManager {
             case CUSTOM_ONLY -> customPricesEnabled && itemPrices.containsKey(material.name());
             case SHOP_ONLY -> shopIntegrationEnabled && shopIntegrationManager != null &&
                     shopIntegrationManager.getPrice(material) > 0;
-            case CUSTOM_PRIORITY, SHOP_PRIORITY -> (customPricesEnabled && itemPrices.containsKey(material.name())) ||
-                    (shopIntegrationEnabled && shopIntegrationManager != null &&
-                            shopIntegrationManager.getPrice(material) > 0);
+            case CUSTOM_PRIORITY, SHOP_PRIORITY -> getPrice(material) > 0;
             default -> false;
         };
     }
