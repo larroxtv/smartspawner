@@ -66,7 +66,6 @@ import github.nighter.smartspawner.spawner.lootgen.SpawnerRangeChecker;
 import github.nighter.smartspawner.spawner.natural.NaturalSpawnerListener;
 import github.nighter.smartspawner.spawner.properties.SpawnerData;
 import github.nighter.smartspawner.spawner.sell.SpawnerSellManager;
-import github.nighter.smartspawner.spawner.utils.SpawnerLocationLockManager;
 import github.nighter.smartspawner.spawner.utils.SpawnerTypeChecker;
 import github.nighter.smartspawner.updates.ConfigUpdater;
 import github.nighter.smartspawner.updates.LanguageUpdater;
@@ -136,7 +135,6 @@ public class SmartSpawner extends JavaPlugin implements SmartSpawnerPlugin {
     private SpawnerManager spawnerManager;
     private HopperService hopperService;
     private HopperConfig hopperConfig;
-    private SpawnerLocationLockManager spawnerLocationLockManager;
     private SpawnerRemovalService spawnerRemovalService;
 
     // Event handlers and utilities
@@ -305,7 +303,6 @@ public class SmartSpawner extends JavaPlugin implements SmartSpawnerPlugin {
         }
 
         this.spawnerManager = new SpawnerManager(this);
-        this.spawnerLocationLockManager = new SpawnerLocationLockManager(this);
         this.spawnerRemovalService = new SpawnerRemovalService(this);
         this.spawnerManager.reloadAllHolograms();
         this.guiLayoutLoader = new ExternalGuiLayoutLoader(this);
@@ -656,7 +653,6 @@ public class SmartSpawner extends JavaPlugin implements SmartSpawnerPlugin {
         if (hopperService != null) hopperService.cleanup();
         if (spawnerClickManager != null) spawnerClickManager.cleanup();
         if (spawnerStorageUI != null) spawnerStorageUI.cleanup();
-        if (spawnerLocationLockManager !=null) spawnerLocationLockManager.shutdown();
     }
 
     // Spawner Provider for ShopGUI+ integration
