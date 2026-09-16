@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import me.gypopo.economyshopgui.api.EconomyShopGUIHook;
 import me.gypopo.economyshopgui.api.prices.AdvancedSellPrice;
 import me.gypopo.economyshopgui.objects.ShopItem;
+import me.gypopo.economyshopgui.objects.shops.ShopSection;
 import me.gypopo.economyshopgui.util.EcoType;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -14,6 +15,10 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.Map;
 
+/**
+ * Mirrors what /sell and /sellgui do in EconomyShopGUI(-Premium): whatever the shop buys there
+ * is sellable from the spawner GUI, at the same price, without any markup.
+ */
 @RequiredArgsConstructor
 public class EconomyShopGUIProvider implements ShopProvider {
     private final SmartSpawner plugin;
@@ -42,43 +47,98 @@ public class EconomyShopGUIProvider implements ShopProvider {
         return false;
     }
 
-    /**
-     * Mirrors what /sell and /sellgui do in EconomyShopGUI(-Premium):
-     * anything the shop buys there is sellable here, at the same price.
-     */
     @Override
     public double getSellPrice(Material material) {
         try {
             ItemStack item = new ItemStack(material);
-            ShopItem shopItem = EconomyShopGUIHook.getShopItem(item);
 
-            if (shopItem == null || !EconomyShopGUIHook.isSellAble(shopItem)) {
+            // Fast path: the entry EconomyShopGUI resolves for this plain item.
+            double price = priceOf(EconomyShopGUIHook.getShopItem(item), item);
+            if (price > 0.0) {
+                return price;
+            }
+
+            // The fast path picks exactly one entry. A material can appear in several sections,
+            // e.g. PHANTOM_MEMBRANE as a buy-only perk item and again in the sell section; if the
+            // buy-only entry wins, the item looks unsellable. So scan every section for the best
+            // sell price the shop actually offers.
+            return scanSectionsForSellPrice(material, item);
+        } catch (Exception | LinkageError e) {
+            return 0.0;
+        }
+    }
+
+    private double scanSectionsForSellPrice(Material material, ItemStack item) {
+        Map<String, ShopSection> sections;
+        try {
+            sections = EconomyShopGUIHook.getSections();
+        } catch (Exception | LinkageError e) {
+            return 0.0;
+        }
+        if (sections == null || sections.isEmpty()) {
+            return 0.0;
+        }
+
+        double best = 0.0;
+        for (ShopSection section : sections.values()) {
+            if (section == null) {
+                continue;
+            }
+            for (ShopItem shopItem : section.getShopItems()) {
+                if (!matchesMaterial(shopItem, material)) {
+                    continue;
+                }
+                double price = priceOf(shopItem, item);
+                if (price > best) {
+                    best = price;
+                }
+            }
+        }
+        return best;
+    }
+
+    private boolean matchesMaterial(ShopItem shopItem, Material material) {
+        if (shopItem == null) {
+            return false;
+        }
+        try {
+            if (shopItem.hasItemError() || shopItem.isDisplayItem()) {
+                return false;
+            }
+            ItemStack stack = shopItem.getShopItem();
+            return stack != null && stack.getType() == material;
+        } catch (Exception | LinkageError e) {
+            return false;
+        }
+    }
+
+    /** Sell price of one shop entry, 0 when that entry is not sellable. */
+    private double priceOf(ShopItem shopItem, ItemStack item) {
+        if (shopItem == null) {
+            return 0.0;
+        }
+        try {
+            if (!EconomyShopGUIHook.isSellAble(shopItem)) {
                 return 0.0;
             }
 
             // Items with several sell prices (multi-currency setups) return null from the plain
-            // getItemSellPrice(...), which is why they looked unsellable before.
+            // getItemSellPrice(...), so they have to go through AdvancedSellPrice.
             if (EconomyShopGUIHook.hasMultipleSellPrices(shopItem)) {
-                double advanced = getAdvancedSellPrice(shopItem, item);
+                double advanced = advancedSellPrice(shopItem, item);
                 if (advanced > 0.0) {
                     return advanced;
                 }
             }
 
             Double sellPrice = EconomyShopGUIHook.getItemSellPrice(shopItem, item);
-            if (sellPrice != null && sellPrice > 0.0) {
-                return sellPrice;
-            }
-
-            // Last resort: the item-only lookup, which resolves some dynamic-pricing setups.
-            Double fallback = EconomyShopGUIHook.getItemSellPrice(item);
-            return fallback != null && fallback > 0.0 ? fallback : 0.0;
-        } catch (Exception | NoSuchMethodError e) {
+            return sellPrice != null && sellPrice > 0.0 ? sellPrice : 0.0;
+        } catch (Exception | LinkageError e) {
             return 0.0;
         }
     }
 
-    private double getAdvancedSellPrice(ShopItem shopItem, ItemStack item) {
+    private double advancedSellPrice(ShopItem shopItem, ItemStack item) {
         try {
             AdvancedSellPrice advanced = EconomyShopGUIHook.getMultipleSellPrices(shopItem);
             if (advanced == null || !advanced.isSellAble()) {
@@ -98,7 +158,7 @@ public class EconomyShopGUIProvider implements ShopProvider {
                 }
             }
             return best;
-        } catch (Exception | NoSuchMethodError e) {
+        } catch (Exception | LinkageError e) {
             return 0.0;
         }
     }
